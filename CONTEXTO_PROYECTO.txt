@@ -224,7 +224,7 @@ CÓMO PROBARLO MAÑANA (orden exacto)
    "Started ...Application" antes de pasar al siguiente:
      a) eureka-server      -> verificar http://localhost:8761
      b) config-server      -> verificar http://localhost:8888/ms-usuarios/default
-     c) api-gateway        -> verificar http://localhost:8080/actuator/health
+     c) api-gateway        -> verificar http://localhost:8080/actuator/health (8090 si es via Docker)
      d) ms-usuarios        -> verificar http://localhost:8081/actuator/health
      e) ms-vacantes        -> verificar http://localhost:8082/actuator/health
      f) ms-postulaciones   -> verificar http://localhost:8083/actuator/health
@@ -274,3 +274,90 @@ POSIBLES PRÓXIMOS PASOS A DISCUTIR MAÑANA
   Swagger/OpenAPI, un endpoint de logout/blacklist de tokens, etc.)
 - Decidir qué hacer con la limitación del punto 1 (idUsuario en el body) si importa para
   la rúbrica de seguridad
+
+
+=====================================================================
+SESIÓN 2026-07-07 (Mac + OrbStack) — bugs reales encontrados al levantar en Docker
+=====================================================================
+Contexto: Jason clonó el repo (ya en GitHub, 1 commit) a su laptop Mac. Ahí usa OrbStack
+(no Docker Desktop) como daemon Docker — 100% compatible con la CLI, sin cambios de
+Dockerfile/compose por eso. `mvn` no está instalado en esa Mac pero no hace falta: los
+Dockerfiles son multi-stage y compilan dentro del contenedor.
+
+Al correr `docker compose up --build` aparecieron 5 bugs reales (nunca se había probado
+en ejecución, ni en Docker ni en IntelliJ). Todos arreglados, quedaron los 6 servicios
++ MySQL healthy y los 5 clientes (api-gateway, ms-usuarios, ms-vacantes, ms-postulaciones,
+config-server) registrados y UP en Eureka:
+
+1. Puerto 8080 ocupado por otro proyecto Docker en la misma Mac (curso distinto,
+   contenedor "springboot" del proyecto 2026-1-4c24-pi-2b). Fix: api-gateway ahora se
+   expone en el host como 8090 (`"8090:8080"` en docker-compose.yml), puerto interno
+   sigue en 8080. Actualizado en README, ATS-Postman-Collection.json (variable
+   gatewayUrl) y este archivo. Si corres el Gateway suelto en IntelliJ sigue siendo 8080.
+
+2. `spring.config.import: "configserver:http://localhost:8888"` hardcodeado en el
+   application.yml empaquetado de api-gateway, ms-usuarios, ms-vacantes y ms-postulaciones.
+   Al correr en Docker, esto intenta conectar a "localhost:8888" DENTRO del propio
+   contenedor (nada escucha ahí) en vez de usar la variable de entorno SPRING_CONFIG_IMPORT
+   ya seteada a config-server:8888 — un gotcha conocido de Spring Boot donde el config.import
+   del classpath no es superado limpiamente por el de entorno. Fix: se cambió a
+   `import: "configserver:"` (sin host) en los 4 application.yml, y se cambió la variable de
+   entorno en docker-compose.yml de SPRING_CONFIG_IMPORT a SPRING_CLOUD_CONFIG_URI (esa sí
+   es una property normal, con precedencia normal). Default sigue siendo localhost:8888 para
+   quien corra en IntelliJ sin Docker.
+
+3. config-server, corriendo en Docker, no encontraba `config-repo/` (esa ruta solo existe en
+   el host, el Dockerfile de config-server YA tenía el comentario "en Docker se monta como
+   volumen" pero el volumen nunca se agregó a docker-compose.yml). Sin esto, config-server
+   respondía OK pero con propiedades vacías para todos los clientes (ningún error visible,
+   simplemente no había nada que servir). Fix: se agregó
+   `volumes: - ./config-repo:/config-repo:ro` al servicio config-server. No se tocó código
+   de config-server ni el contenido de config-repo/application.yml ni api-gateway.yml.
+
+4. MySQL 8 + `useSSL=false` sin permitir la llave pública → error real de conexión
+   "Public Key Retrieval is not allowed" (el log "root@localhost created with an empty
+   password" que preocupaba a Jason era en cambio un log de bootstrap inofensivo y conocido
+   de la imagen mysql:8.0, no la causa real). Fix: se agregó `allowPublicKeyRetrieval=true`
+   a la datasource URL en docker-compose.yml (los 3 microservicios) Y en
+   config-repo/ms-usuarios.yml, ms-vacantes.yml, ms-postulaciones.yml (para que el mismo
+   fix aplique también corriendo en IntelliJ contra MySQL local).
+
+5. ms-postulaciones no arrancaba: `NoClassDefFoundError:
+   io/github/resilience4j/spring6/fallback/RxJava3FallbackDecorator`. Causa raíz real:
+   spring-cloud-dependencies (BOM, 2025.0.0) pisaba la versión transitiva de
+   resilience4j-spring6 a 2.2.0 (esa versión no tiene la clase RxJava3FallbackDecorator),
+   mientras resilience4j-spring-boot3 se declaraba en 2.4.0 — mismatch de versiones entre
+   el autoconfig (compilado contra 2.4.0) y el jar real presente (2.2.0). Fix: se agregó
+   el import de `io.github.resilience4j:resilience4j-bom:${resilience4j.version}` en el
+   dependencyManagement de ms-postulaciones/pom.xml, ANTES del import de
+   spring-cloud-dependencies (el orden importa: el primer import declarado gana si hay
+   conflicto). Verificado con `mvn dependency:tree` que todo resilience4j-* quedó en 2.4.0.
+
+6. api-gateway no se registraba en Eureka (seguía intentando `http://localhost:8761/eureka/`
+   pese a tener EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+   correctamente seteado). Causa: config-repo/application.yml (compartido, PROHIBIDO tocar)
+   trae `eureka.client.service-url.defaultZone: http://localhost:8761/eureka/` para el modo
+   IntelliJ/local, y ese valor remoto le ganaba a la variable de entorno para api-gateway
+   específicamente (spring-cloud-config permite por defecto que la config remota
+   sobreescriba variables locales: `spring.cloud.config.override-system-properties=true`
+   por defecto). Nota: ms-usuarios/vacantes/postulaciones no sufren esto porque sus
+   config-repo/ms-*.yml no declaran eureka.client, así que ahí no hay conflicto. Fix: se
+   agregó `SPRING_CLOUD_CONFIG_OVERRIDE_NONE: "true"` como variable de entorno de
+   api-gateway en docker-compose.yml (fuerza que lo local — env vars, classpath — SIEMPRE
+   gane sobre lo remoto). No se tocó config-repo/application.yml ni api-gateway.yml.
+
+Verificado con smoke test real vía curl a través del Gateway (localhost:8090):
+GET /api/vacantes/abiertas -> 200 []  y  POST /api/usuarios/registro -> 201 (creó un
+usuario "smoke-test@example.com" de prueba en db_usuarios — no es parte de los datos de
+database.sql, se puede ignorar o borrar).
+
+PENDIENTE REAL (lo que falta, ahora sí en serio):
+  [ ] Correr la colección de Postman completa contra localhost:8090 y tomar capturas
+  [ ] Probar el Circuit Breaker de verdad (docker stop ms-vacantes, repetir "crear
+      postulación", confirmar 503 + mensaje de fallback, docker start ms-vacantes)
+  [ ] Revisar/limpiar el usuario de smoke test si molesta para la demo
+  [ ] git add + commit + push de todos los fixes de esta sesión (docker-compose.yml,
+      los 4 application.yml, ms-postulaciones/pom.xml, config-repo/ms-*.yml, README,
+      ATS-Postman-Collection.json) — Jason decide/autoriza el commit
+  [ ] Decidir tests automatizados y la limitación de idUsuario en el body (sin cambios,
+      siguen pendientes de antes)

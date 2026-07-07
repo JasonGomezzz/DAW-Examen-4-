@@ -1,66 +1,135 @@
--- =====================================================================
--- ATS - Sistema de Reclutamiento
--- Script de esquema y datos de prueba para las 3 bases de datos.
--- Cada microservicio crea sus tablas automáticamente (ddl-auto: update),
--- este script sirve como respaldo/documentación y para poblar datos
--- de prueba en un entorno limpio.
--- =====================================================================
+-- MySQL dump 10.13  Distrib 8.0.46, for Linux (aarch64)
+--
+-- Host: localhost    Database: db_usuarios
+-- ------------------------------------------------------
+-- Server version	8.0.46
 
--- =====================================================================
--- db_usuarios (ms-usuarios)
--- =====================================================================
-CREATE DATABASE IF NOT EXISTS db_usuarios;
-USE db_usuarios;
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!50503 SET NAMES utf8mb4 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
-CREATE TABLE IF NOT EXISTS usuarios (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(120) NOT NULL,
-    email VARCHAR(150) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    rol VARCHAR(20) NOT NULL
-);
+--
+-- Current Database: `db_usuarios`
+--
 
--- password en texto plano: candidato123 / admin123 (hash BCrypt)
-INSERT INTO usuarios (nombre, email, password, rol) VALUES
-    ('Juan Perez', 'juan.perez@example.com', '$2a$10$B.dN3kmUSMsJ4lH5lk59.uPmJ70N7fvhg0n7bAnQY1fHJDq/M5ZiS', 'CANDIDATO'),
-    ('Maria Admin', 'maria.admin@example.com', '$2a$10$RjvFNwdnl4Chi1QS2x5G7.7bUyt2qXGSkhfdTOAV7Tt8cW94g9JyC', 'ADMIN');
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `db_usuarios` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 
--- =====================================================================
--- db_vacantes (ms-vacantes)
--- =====================================================================
-CREATE DATABASE IF NOT EXISTS db_vacantes;
-USE db_vacantes;
+USE `db_usuarios`;
 
-CREATE TABLE IF NOT EXISTS vacantes (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    titulo VARCHAR(150) NOT NULL,
-    descripcion VARCHAR(2000) NOT NULL,
-    requisitos VARCHAR(2000) NOT NULL,
-    salario DOUBLE NOT NULL,
-    estado VARCHAR(20) NOT NULL,
-    fecha_publicacion DATETIME NOT NULL
-);
+--
+-- Table structure for table `usuarios`
+--
 
-INSERT INTO vacantes (titulo, descripcion, requisitos, salario, estado, fecha_publicacion) VALUES
-    ('Desarrollador Backend Java', 'Desarrollo de microservicios con Spring Boot', 'Java 21, Spring Boot, MySQL, 2+ años de experiencia', 5500.00, 'ABIERTA', NOW()),
-    ('Analista QA', 'Pruebas funcionales y automatizadas', 'Experiencia con Selenium y Postman', 3800.00, 'ABIERTA', NOW()),
-    ('DevOps Engineer', 'Gestión de infraestructura y despliegues', 'Docker, Kubernetes, CI/CD', 6200.00, 'CERRADA', NOW());
+DROP TABLE IF EXISTS `usuarios`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `usuarios` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `email` varchar(150) NOT NULL,
+  `nombre` varchar(120) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `rol` enum('ADMIN','CANDIDATO') NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKkfsp0s1tflm1cwlj8idhqsad0` (`email`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
--- =====================================================================
--- db_postulaciones (ms-postulaciones)
--- =====================================================================
-CREATE DATABASE IF NOT EXISTS db_postulaciones;
-USE db_postulaciones;
+--
+-- Dumping data for table `usuarios`
+--
 
-CREATE TABLE IF NOT EXISTS postulaciones (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    id_vacante BIGINT NOT NULL,
-    id_usuario BIGINT NOT NULL,
-    estado VARCHAR(20) NOT NULL,
-    fecha_postulacion DATETIME NOT NULL
-);
+LOCK TABLES `usuarios` WRITE;
+/*!40000 ALTER TABLE `usuarios` DISABLE KEYS */;
+INSERT INTO `usuarios` VALUES (1,'smoke-test@example.com','Test Smoke','$2a$10$ZOHvVINWCiJcVcSLBfu92elXd30n8L.ko5NkDOOEfFSFhXLcbiaNq','CANDIDATO'),(2,'juan.perez.postman@example.com','Juan Perez','$2a$10$jIC2mYDDjzkqgbZTuUWJe.Hfhxc4lOpSLis78saXsmdJa.GS9Atmi','CANDIDATO'),(3,'maria.admin.postman@example.com','Maria Admin','$2a$10$Ge/RJBvc9vHIJDXtzskSt.EHdGCKFGagQcLvNV3uN7usBKLUioj2a','ADMIN'),(4,'admin-debug@example.com','Admin Debug','$2a$10$johWc9UpGjYolQwmkgFnxuqRTCWb.JS7R2cBcUNhhbcrgzbop6Khy','ADMIN');
+/*!40000 ALTER TABLE `usuarios` ENABLE KEYS */;
+UNLOCK TABLES;
 
--- Referencia: id_usuario 1 = Juan Perez (CANDIDATO), id_vacante 1 y 2 = vacantes abiertas creadas arriba
-INSERT INTO postulaciones (id_vacante, id_usuario, estado, fecha_postulacion) VALUES
-    (1, 1, 'PENDIENTE', NOW()),
-    (2, 1, 'EN_REVISION', NOW());
+--
+-- Current Database: `db_vacantes`
+--
+
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `db_vacantes` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+
+USE `db_vacantes`;
+
+--
+-- Table structure for table `vacantes`
+--
+
+DROP TABLE IF EXISTS `vacantes`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `vacantes` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `descripcion` varchar(2000) NOT NULL,
+  `estado` enum('ABIERTA','CERRADA') NOT NULL,
+  `fecha_publicacion` datetime(6) NOT NULL,
+  `requisitos` varchar(2000) NOT NULL,
+  `salario` double NOT NULL,
+  `titulo` varchar(150) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `vacantes`
+--
+
+LOCK TABLES `vacantes` WRITE;
+/*!40000 ALTER TABLE `vacantes` DISABLE KEYS */;
+INSERT INTO `vacantes` VALUES (2,'desc test','ABIERTA','2026-07-07 12:28:49.206923','req test',1000,'Debug Vacante');
+/*!40000 ALTER TABLE `vacantes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Current Database: `db_postulaciones`
+--
+
+CREATE DATABASE /*!32312 IF NOT EXISTS*/ `db_postulaciones` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+
+USE `db_postulaciones`;
+
+--
+-- Table structure for table `postulaciones`
+--
+
+DROP TABLE IF EXISTS `postulaciones`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `postulaciones` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `estado` enum('ACEPTADO','EN_REVISION','PENDIENTE','RECHAZADO') NOT NULL,
+  `fecha_postulacion` datetime(6) NOT NULL,
+  `id_usuario` bigint NOT NULL,
+  `id_vacante` bigint NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `postulaciones`
+--
+
+LOCK TABLES `postulaciones` WRITE;
+/*!40000 ALTER TABLE `postulaciones` DISABLE KEYS */;
+INSERT INTO `postulaciones` VALUES (1,'EN_REVISION','2026-07-07 13:39:16.485349',2,2),(2,'PENDIENTE','2026-07-07 14:46:44.648994',2,2);
+/*!40000 ALTER TABLE `postulaciones` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2026-07-07 20:10:47

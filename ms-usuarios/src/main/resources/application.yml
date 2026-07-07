@@ -2,4 +2,4 @@ spring:
   application:
     name: ms-usuarios
   config:
-    import: "configserver:http://localhost:8888"
+    import: "configserver:"

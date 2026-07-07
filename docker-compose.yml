@@ -37,6 +37,8 @@ services:
       - "8888:8888"
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    volumes:
+      - ./config-repo:/config-repo:ro
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -52,9 +54,10 @@ services:
     build: ./api-gateway
     container_name: api-gateway
     ports:
-      - "8080:8080"
+      - "8090:8080"
     environment:
-      SPRING_CONFIG_IMPORT: configserver:http://config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://config-server:8888
+      SPRING_CLOUD_CONFIG_OVERRIDE_NONE: "true"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
     depends_on:
       config-server:
@@ -68,9 +71,9 @@ services:
     ports:
       - "8081:8081"
     environment:
-      SPRING_CONFIG_IMPORT: configserver:http://config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://config-server:8888
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_usuarios?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Lima
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_usuarios?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
     depends_on:
       config-server:
         condition: service_healthy
@@ -85,9 +88,9 @@ services:
     ports:
       - "8082:8082"
     environment:
-      SPRING_CONFIG_IMPORT: configserver:http://config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://config-server:8888
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_vacantes?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Lima
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_vacantes?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
     depends_on:
       config-server:
         condition: service_healthy
@@ -102,9 +105,9 @@ services:
     ports:
       - "8083:8083"
     environment:
-      SPRING_CONFIG_IMPORT: configserver:http://config-server:8888
+      SPRING_CLOUD_CONFIG_URI: http://config-server:8888
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_postulaciones?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Lima
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/db_postulaciones?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Lima
     depends_on:
       config-server:
         condition: service_healthy

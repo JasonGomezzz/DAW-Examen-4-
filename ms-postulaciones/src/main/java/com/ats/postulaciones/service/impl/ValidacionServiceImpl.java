@@ -31,7 +31,7 @@ public class ValidacionServiceImpl implements ValidacionService {
 
     @Override
     @Retry(name = "vacanteService", fallbackMethod = "vacanteFallback")
-    @CircuitBreaker(name = "vacanteService", fallbackMethod = "vacanteFallback")
+    @CircuitBreaker(name = "vacanteService")
     public VacanteDto validarVacante(Long idVacante) {
         log.info("Consultando ms-vacantes para validar vacante {}", idVacante);
         return vacanteClient.obtenerPorId(idVacante);
@@ -39,7 +39,7 @@ public class ValidacionServiceImpl implements ValidacionService {
 
     @Override
     @Retry(name = "usuarioService", fallbackMethod = "usuarioFallback")
-    @CircuitBreaker(name = "usuarioService", fallbackMethod = "usuarioFallback")
+    @CircuitBreaker(name = "usuarioService")
     public UsuarioDto validarUsuario(Long idUsuario) {
         log.info("Consultando ms-usuarios para validar usuario {}", idUsuario);
         return usuarioClient.obtenerPorId(idUsuario);

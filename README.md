@@ -6,7 +6,7 @@ Arquitectura de microservicios con Spring Boot 3.5.0 + Spring Cloud 2025.0.0 + J
 
 ✅ eureka-server (puerto 8761)
 ✅ config-server (puerto 8888, modo nativo → lee de `config-repo/`)
-✅ api-gateway (puerto 8080)
+✅ api-gateway (puerto 8080 interno / expuesto en 8090 en Docker — ver nota de puertos)
 ✅ ms-usuarios (puerto 8081) — registro/login, JWT, roles CANDIDATO/ADMIN
 ✅ ms-vacantes (puerto 8082) — CRUD de vacantes, acceso público a vacantes abiertas
 ✅ ms-postulaciones (puerto 8083) — Feign hacia ms-usuarios/ms-vacantes + Resilience4j (Circuit Breaker + Retry)
@@ -97,6 +97,7 @@ corriendo) → ms-usuarios → ms-vacantes → ms-postulaciones. Espera a que ca
 1. Nueva ventana IntelliJ → carpeta `api-gateway`
 2. Run sobre `ApiGatewayApplication.java`
 3. Verifica que aparezca registrado en Eureka y que http://localhost:8080/actuator/health responda `UP`.
+   (Nota: esto aplica solo si corres el Gateway directo en IntelliJ. En Docker el puerto expuesto es 8090, ver más abajo.)
 
 ### 4. MySQL
 Verifica que el servicio MySQL esté corriendo en `localhost:3306` (usuario `root` / password `root`).
@@ -119,8 +120,14 @@ docker compose up --build
 ```
 
 Esto levanta MySQL + los 6 servicios en el orden correcto usando `depends_on` con healthchecks
-(nadie arranca hasta que su dependencia responde saludable). Puertos expuestos: 8761, 8888, 8080,
+(nadie arranca hasta que su dependencia responde saludable). Puertos expuestos: 8761, 8888, 8090,
 8081, 8082, 8083 y 3306.
+
+**Nota de puertos:** en Docker, `api-gateway` se expone en el host como **8090** (no 8080), porque
+8080 puede estar ocupado por otro proyecto en el mismo entorno de contenedores. Por dentro el
+Gateway sigue escuchando en 8080 (`config-repo/api-gateway.yml` y el `Dockerfile` no cambian), el
+mapeo `8090:8080` solo afecta cómo se accede desde el host. Si corres el Gateway suelto en
+IntelliJ (sin Docker), sigue siendo `http://localhost:8080`.
 
 Para probar el Circuit Breaker con Docker: `docker stop ms-vacantes` y repite la petición de
 "Crear postulación" en Postman — verás el fallback `503`.
@@ -128,7 +135,7 @@ Para probar el Circuit Breaker con Docker: `docker stop ms-vacantes` y repite la
 ## Colección de Postman
 
 Importa `ATS-Postman-Collection.json`. Todas las peticiones de negocio pasan por el API Gateway
-(`http://localhost:8080`). Los tests de cada request guardan automáticamente en variables de
+(`http://localhost:8090` en Docker, vía la variable de colección `gatewayUrl`). Los tests de cada request guardan automáticamente en variables de
 colección el `token` (candidato/admin) y los IDs creados, para encadenar las siguientes peticiones.
 Incluye:
 - Registro/login/consulta de usuarios (JWT)
@@ -141,15 +148,15 @@ Incluye:
 
 Código implementado (verificado que compila) / Verificado en ejecución real:
 
-- [x] código / [ ] ejecución — Arquitectura de microservicios (6 proyectos independientes)
-- [x] código / [ ] ejecución — Eureka: los 6 se registran correctamente
-- [x] código / [ ] ejecución — API Gateway enruta a los 3 microservicios de negocio (`/api/usuarios/**`, `/api/vacantes/**`, `/api/postulaciones/**`)
-- [x] código / [ ] ejecución — Config Server centralizado (puerto, nombre app, BD, mensajes personalizados en `config-repo/`)
-- [x] código / [ ] ejecución — Resilience4j: Circuit Breaker + Retry en ms-postulaciones (Feign hacia ms-usuarios y ms-vacantes)
-- [x] código / [ ] ejecución — Actuator (`/actuator/health`, `/actuator/info`, `/actuator/metrics`) expuesto en los 6 servicios
+- [x] código / [x] ejecución — Arquitectura de microservicios (6 proyectos independientes), verificado con `docker compose up` en Mac + OrbStack
+- [x] código / [x] ejecución — Eureka: los 6 se registran correctamente (eureka-server no se autorregistra por diseño; los otros 5 aparecen UP)
+- [x] código / [x] ejecución — API Gateway enruta a los 3 microservicios de negocio (`/api/usuarios/**`, `/api/vacantes/**`, `/api/postulaciones/**`), probado con curl end-to-end
+- [x] código / [x] ejecución — Config Server centralizado (puerto, nombre app, BD, mensajes personalizados en `config-repo/`)
+- [x] código / [ ] ejecución — Resilience4j: Circuit Breaker + Retry en ms-postulaciones (Feign hacia ms-usuarios y ms-vacantes) — pendiente probar el escenario real (apagar un servicio)
+- [x] código / [x] ejecución — Actuator (`/actuator/health`, `/actuator/info`, `/actuator/metrics`) expuesto en los 6 servicios
 - [x] código — Cada microservicio de negocio tiene su propia BD (`db_usuarios`, `db_vacantes`, `db_postulaciones`, sin tablas compartidas)
 - [x] código — Dockerfile en cada proyecto (multi-stage `maven:3.9-eclipse-temurin-21` → `eclipse-temurin:21-jre-alpine`)
-- [x] código (`docker compose config` validado) / [ ] ejecución — `docker-compose.yml` levanta los 6 servicios + MySQL con orden de arranque garantizado
+- [x] código / [x] ejecución — `docker-compose.yml` levanta los 6 servicios + MySQL con orden de arranque garantizado (probado en Mac + OrbStack, 2026-07-07)
 - [x] código (JSON válido) / [ ] ejecución — Postman cubre CRUD, comunicación entre microservicios, acceso vía Gateway y Circuit Breaker
 
 ## Limitaciones conocidas

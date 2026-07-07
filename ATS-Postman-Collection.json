@@ -1,11 +1,11 @@
 {
   "info": {
     "name": "ATS - Sistema de Reclutamiento",
-    "description": "Colección de pruebas para eureka-server, config-server, api-gateway, ms-usuarios, ms-vacantes y ms-postulaciones. Todas las peticiones de negocio pasan por el API Gateway (http://localhost:8080).",
+    "description": "Colección de pruebas para eureka-server, config-server, api-gateway, ms-usuarios, ms-vacantes y ms-postulaciones. Todas las peticiones de negocio pasan por el API Gateway (http://localhost:8090 en Docker; 8080 si corres el Gateway suelto en IntelliJ).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "gatewayUrl", "value": "http://localhost:8080" },
+    { "key": "gatewayUrl", "value": "http://localhost:8090" },
     { "key": "eurekaUrl", "value": "http://localhost:8761" },
     { "key": "configUrl", "value": "http://localhost:8888" },
     { "key": "candidatoToken", "value": "" },
