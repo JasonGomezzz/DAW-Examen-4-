@@ -1,0 +1,68 @@
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/db_postulaciones?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Lima
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+jwt:
+  secret: "Z5tdKuwoCRsuHSFZjpOf1/xq22Ut6AaJvLs8cOjA2N6CW5iUy7K6KExWIjDmo6+N"
+  expiration: 86400000
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 3000
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      usuarioService:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        ignoreExceptions:
+          - feign.FeignException$NotFound
+      vacanteService:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        ignoreExceptions:
+          - feign.FeignException$NotFound
+  retry:
+    instances:
+      usuarioService:
+        maxAttempts: 3
+        waitDuration: 1s
+        ignoreExceptions:
+          - feign.FeignException$NotFound
+      vacanteService:
+        maxAttempts: 3
+        waitDuration: 1s
+        ignoreExceptions:
+          - feign.FeignException$NotFound
+
+management:
+  health:
+    circuitbreakers:
+      enabled: true
+    retries:
+      enabled: true

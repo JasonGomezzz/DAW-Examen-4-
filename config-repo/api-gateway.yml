@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: ms-usuarios
+          uri: lb://ms-usuarios
+          predicates:
+            - Path=/api/usuarios/**
+        - id: ms-vacantes
+          uri: lb://ms-vacantes
+          predicates:
+            - Path=/api/vacantes/**
+        - id: ms-postulaciones
+          uri: lb://ms-postulaciones
+          predicates:
+            - Path=/api/postulaciones/**

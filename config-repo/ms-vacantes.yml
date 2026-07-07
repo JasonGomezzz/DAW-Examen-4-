@@ -1,0 +1,20 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/db_vacantes?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=America/Lima
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+jwt:
+  secret: "Z5tdKuwoCRsuHSFZjpOf1/xq22Ut6AaJvLs8cOjA2N6CW5iUy7K6KExWIjDmo6+N"
+  expiration: 86400000

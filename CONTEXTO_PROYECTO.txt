@@ -1,0 +1,276 @@
+=====================================================================
+ATS - SISTEMA DE RECLUTAMIENTO (Evaluación 04)
+Contexto de proyecto para continuar - guardado el 2026-07-07
+=====================================================================
+
+QUÉ ES ESTO
+-----------
+Sistema de microservicios en Spring Boot para una evaluación universitaria.
+Arquitectura: Java 21 + Spring Boot 3.5.0 + Spring Cloud 2025.0.0.
+Repo local (NO es git todavía): C:\Users\USUARIO\Downloads\ats-microservices\ats-microservices\
+
+Reglas del juego (definidas por el mentor del usuario, "causa"):
+- Claude Code escribe TODO el código (los 6 microservicios, docker-compose, SQL, Postman).
+- El usuario (Jason) hace TODO lo manual: correr los servicios en IntelliJ en orden,
+  verificar Eureka, correr Postman y tomar capturas, subir a GitHub.
+- NUNCA tocar: eureka-server/, config-server/, api-gateway/ (código), ni
+  config-repo/application.yml, ni config-repo/api-gateway.yml (son archivos compartidos
+  ya funcionando, fuera de scope).
+
+
+=====================================================================
+ESTADO ACTUAL (a fecha de hoy)
+=====================================================================
+
+INFRAESTRUCTURA (ya existía antes de esta sesión, NO tocada):
+  [OK] eureka-server   puerto 8761
+  [OK] config-server   puerto 8888 (modo nativo, lee de config-repo/)
+  [OK] api-gateway     puerto 8080 (enruta /api/usuarios/**, /api/vacantes/**, /api/postulaciones/**)
+
+MICROSERVICIOS DE NEGOCIO (creados en esta sesión, código completo y COMPILANDO):
+  [OK] ms-usuarios       puerto 8081
+  [OK] ms-vacantes       puerto 8082
+  [OK] ms-postulaciones  puerto 8083
+
+INFRAESTRUCTURA ADICIONAL (creada en esta sesión):
+  [OK] docker-compose.yml       (6 servicios + MySQL, validado con `docker compose config`)
+  [OK] database.sql             (schema + datos de prueba: 2 usuarios, 3 vacantes, 2 postulaciones)
+  [OK] ATS-Postman-Collection.json  (colección completa, JSON válido)
+  [OK] README.md                (actualizado con checklist y guía de arranque)
+
+LO QUE FALTA (pendiente, es la parte MANUAL del usuario, no de Claude Code):
+  [ ] Levantar los 6 servicios de verdad en IntelliJ (orden estricto, ver abajo) y confirmar
+      que los 6 aparecen UP en http://localhost:8761
+  [ ] Correr la colección de Postman completa y tomar capturas (evidencia de evaluación)
+  [ ] Probar el escenario de Circuit Breaker (apagar ms-vacantes, repetir "crear postulación",
+      confirmar 503 con el mensaje de fallback)
+  [ ] git init + primer commit + subir a GitHub (ahora mismo esta carpeta NO es un repo git,
+      no hay ni un commit todavía)
+  [ ] (Opcional pero recomendado) escribir al menos algunos tests, ver sección de limitaciones
+
+
+=====================================================================
+DETALLE TÉCNICO DE LO CONSTRUIDO
+=====================================================================
+
+--- ms-usuarios (puerto 8081) ---
+Entidad Usuario: id, nombre, email (unique), password (BCrypt), rol (enum CANDIDATO, ADMIN)
+Endpoints:
+  POST /api/usuarios/registro   -> público, crea usuario, hashea password con BCrypt
+  POST /api/usuarios/login      -> público, valida credenciales, devuelve JWT
+  GET  /api/usuarios/{id}       -> requiere JWT válido (cualquier rol)
+  GET  /api/usuarios            -> requiere JWT con rol ADMIN
+Es el ÚNICO servicio que EMITE JWT (JwtUtil.generarToken). Los otros dos solo VALIDAN.
+Paquetes: controller, service/service.impl, repository, entity, dto, security, exception
+
+--- ms-vacantes (puerto 8082) ---
+Entidad Vacante: id, titulo, descripcion, requisitos, salario, estado (ABIERTA/CERRADA),
+fechaPublicacion
+Endpoints:
+  POST   /api/vacantes            -> solo ADMIN
+  PUT    /api/vacantes/{id}       -> solo ADMIN
+  DELETE /api/vacantes/{id}       -> solo ADMIN
+  GET    /api/vacantes/{id}       -> requiere JWT (cualquier rol) — usado también por Feign
+                                      desde ms-postulaciones
+  GET    /api/vacantes            -> requiere JWT (cualquier rol)
+  GET    /api/vacantes/abiertas   -> PÚBLICO, sin JWT
+Solo VALIDA JWT (no emite), usa el mismo secreto compartido que ms-usuarios.
+
+--- ms-postulaciones (puerto 8083) ---
+Entidad Postulacion: id, idVacante, idUsuario, estado (PENDIENTE/EN_REVISION/ACEPTADO/RECHAZADO),
+fechaPostulacion
+Endpoints:
+  POST  /api/postulaciones                    -> requiere JWT, valida idVacante e idUsuario
+                                                   vía Feign contra ms-vacantes y ms-usuarios
+  PATCH /api/postulaciones/{id}/estado        -> solo ADMIN
+  GET   /api/postulaciones/usuario/{idUsuario} -> requiere JWT (historial)
+Paquetes adicionales frente a los otros 2:
+  client/   -> UsuarioClient y VacanteClient (interfaces @FeignClient)
+  config/   -> FeignClientConfig: RequestInterceptor que reenvía el header Authorization
+               de la petición entrante hacia las llamadas Feign salientes (así ms-vacantes/
+               ms-usuarios también reciben el JWT del usuario original)
+Resilience4j (io.github.resilience4j:resilience4j-spring-boot3 v2.4.0):
+  - ValidacionServiceImpl.validarVacante() / validarUsuario() están anotados con
+    @Retry + @CircuitBreaker (nombres de instancia: "vacanteService", "usuarioService")
+  - Si el servicio dependiente está caído: reintenta (3 intentos), si sigue fallando y se
+    supera el umbral, el circuito se ABRE -> responde 503 inmediatamente con el mensaje
+    "No fue posible consultar el servicio. Intente nuevamente." (viene de
+    config-repo/application.yml -> app.mensaje-error-servicio, NO hardcodeado)
+  - Un 404 real (feign.FeignException$NotFound, o sea "la vacante/usuario no existe") está
+    EXCLUIDO del conteo de fallos del circuit breaker y del retry (ignoreExceptions), y se
+    traduce a un 404 normal (ResourceNotFoundException), no al mensaje de fallback. Esto
+    evita confundir "no existe" con "servicio caído".
+  - Config completa de circuit breaker / retry vive en config-repo/ms-postulaciones.yml
+
+
+--- SEGURIDAD JWT (cómo funciona entre los 3 servicios) ---
+- jjwt 0.12.6 (jjwt-api, jjwt-impl, jjwt-jackson)
+- HS256, secreto compartido puesto IGUAL en los 3 archivos:
+    config-repo/ms-usuarios.yml
+    config-repo/ms-vacantes.yml
+    config-repo/ms-postulaciones.yml
+  (clave: jwt.secret, jwt.expiration: 86400000 ms = 24h)
+  NO se tocó config-repo/application.yml (archivo prohibido) — por eso el secreto está
+  duplicado en los 3 archivos en vez de estar centralizado ahí.
+- Claims del token: subject = email, claim "id" = id de usuario, claim "rol" = CANDIDATO|ADMIN
+- Cada servicio tiene su propio JwtAuthenticationFilter (OncePerRequestFilter) que lee el
+  header "Authorization: Bearer <token>", valida firma, y mete un
+  UsernamePasswordAuthenticationToken en el SecurityContext con authority "ROLE_<rol>"
+- SecurityConfig de cada servicio define qué rutas son públicas / requieren rol ADMIN /
+  requieren solo estar autenticado
+
+
+--- BASE DE DATOS ---
+Cada microservicio tiene su propia BD MySQL (nada compartido):
+  db_usuarios, db_vacantes, db_postulaciones
+Credenciales: root / root, localhost:3306, createDatabaseIfNotExist=true (Hibernate las
+crea solas, ddl-auto: update). database.sql en la raíz es un script de respaldo con el
+mismo schema + datos de prueba, por si se quiere poblar una BD limpia a mano.
+
+
+=====================================================================
+PROBLEMA TÉCNICO QUE APARECIÓ Y CÓMO SE RESOLVIÓ
+=====================================================================
+Al compilar ms-usuarios la primera vez, TODO lo que dependía de Lombok (@Data, @Builder,
+@Slf4j, etc.) fallaba con "cannot find symbol" para getters/setters/builders/log que
+nunca se generaban.
+
+Causa raíz: desde JDK 23 en adelante, javac deshabilita por defecto el descubrimiento
+automático de annotation processors en el classpath (antes bastaba con tener lombok como
+dependencia). El JDK usado en la máquina al momento de compilar era JDK 24.
+
+Fix aplicado en los 3 poms nuevos (ms-usuarios, ms-vacantes, ms-postulaciones):
+  <plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+      <annotationProcessorPaths>
+        <path>
+          <groupId>org.projectlombok</groupId>
+          <artifactId>lombok</artifactId>
+          <version>1.18.38</version>
+        </path>
+      </annotationProcessorPaths>
+    </configuration>
+  </plugin>
+
+Esto fuerza a que se habilite el procesamiento de anotaciones explícitamente, así que
+funciona tanto en JDK 21 como en JDK 23+. Con Java 21 ya configurado (como dijiste que
+tienes ahora) probablemente ni hacía falta el workaround, pero no molesta dejarlo — es
+inofensivo en cualquier JDK y hace el build más explícito/reproducible.
+
+NOTA para mañana: si al compilar con tu JDK 21 real ves algún comportamiento raro
+relacionado con Lombok, dime y lo revisamos, pero no debería pasar nada porque el fix
+es compatible hacia atrás.
+
+
+=====================================================================
+VERSIONES EXACTAS USADAS (para no romper consistencia si seguimos agregando cosas)
+=====================================================================
+- Java 21
+- Spring Boot 3.5.0 (spring-boot-starter-parent, igual en los 6 proyectos)
+- Spring Cloud 2025.0.0 (BOM, igual en los 6 proyectos)
+- jjwt: 0.12.6 (jjwt-api / jjwt-impl / jjwt-jackson) — API "fluida" nueva
+  (Jwts.builder().subject()... / Jwts.parser().verifyWith()...)
+- Lombok: 1.18.38 (resuelto por el parent de Spring Boot, fijado explícito en
+  annotationProcessorPaths)
+- resilience4j-spring-boot3: 2.4.0 (versión fijada a mano, NO viene del BOM de Spring Cloud)
+- mysql-connector-j: resuelto por el parent (no fijado a mano)
+
+
+=====================================================================
+ESTRUCTURA DE ARCHIVOS CREADA
+=====================================================================
+ats-microservices/
+├── eureka-server/              (sin cambios)
+├── config-server/              (sin cambios)
+├── api-gateway/                (sin cambios)
+├── config-repo/
+│   ├── application.yml         (sin cambios - PROHIBIDO tocar)
+│   ├── api-gateway.yml         (sin cambios - PROHIBIDO tocar)
+│   ├── ms-usuarios.yml         (MODIFICADO: se agregó jwt.secret + jwt.expiration)
+│   ├── ms-vacantes.yml         (MODIFICADO: se agregó jwt.secret + jwt.expiration)
+│   └── ms-postulaciones.yml    (MODIFICADO: se agregó jwt.secret, feign timeouts,
+│                                 resilience4j circuitbreaker+retry config,
+│                                 management.health.circuitbreakers/retries)
+├── ms-usuarios/                 <- NUEVO, completo
+│   ├── pom.xml
+│   ├── Dockerfile
+│   └── src/main/java/com/ats/usuarios/
+│       ├── UsuariosApplication.java
+│       ├── controller/UsuarioController.java
+│       ├── service/UsuarioService.java + service/impl/UsuarioServiceImpl.java
+│       ├── repository/UsuarioRepository.java
+│       ├── entity/Usuario.java, Rol.java
+│       ├── dto/RegistroRequest.java, LoginRequest.java, LoginResponse.java,
+│       │        UsuarioResponse.java
+│       ├── security/JwtUtil.java, JwtAuthenticationFilter.java, SecurityConfig.java
+│       └── exception/ResourceNotFoundException.java, EmailYaRegistradoException.java,
+│                       CredencialesInvalidasException.java, ErrorResponse.java,
+│                       GlobalExceptionHandler.java
+├── ms-vacantes/                  <- NUEVO, completo (misma estructura, sin "client/")
+├── ms-postulaciones/             <- NUEVO, completo (misma estructura + client/ y config/)
+├── docker-compose.yml            <- NUEVO
+├── database.sql                  <- NUEVO
+├── ATS-Postman-Collection.json   <- NUEVO
+└── README.md                     (MODIFICADO: checklist + guía de arranque actualizada)
+
+
+=====================================================================
+CÓMO PROBARLO MAÑANA (orden exacto)
+=====================================================================
+1. Confirma MySQL corriendo en localhost:3306 (root/root)
+2. IntelliJ, una ventana por proyecto, EN ESTE ORDEN, esperando el log
+   "Started ...Application" antes de pasar al siguiente:
+     a) eureka-server      -> verificar http://localhost:8761
+     b) config-server      -> verificar http://localhost:8888/ms-usuarios/default
+     c) api-gateway        -> verificar http://localhost:8080/actuator/health
+     d) ms-usuarios        -> verificar http://localhost:8081/actuator/health
+     e) ms-vacantes        -> verificar http://localhost:8082/actuator/health
+     f) ms-postulaciones   -> verificar http://localhost:8083/actuator/health
+3. http://localhost:8761 debe mostrar los 6 servicios UP
+4. Importar ATS-Postman-Collection.json en Postman, correr carpetas en orden 0->1->2->3
+   (los tokens/IDs se autoguardan en variables de colección vía scripts de test)
+5. Probar Circuit Breaker: detener el proceso de ms-vacantes en IntelliJ, repetir la
+   request "Crear postulación", debe responder 503 con el mensaje de fallback
+6. Tomar capturas de: Eureka con los 6 servicios, cada respuesta relevante de Postman,
+   el caso 503 del circuit breaker
+7. Alternativa con Docker (todo de una vez): `docker compose up --build` desde la raíz
+
+
+=====================================================================
+LIMITACIONES / DECISIONES QUE VALE LA PENA REVISAR
+=====================================================================
+1. POST /api/postulaciones recibe idUsuario en el body en vez de sacarlo del JWT.
+   Riesgo: un candidato autenticado podría, en teoría, mandar el idUsuario de otra persona.
+   Se hizo así porque el prompt original describía la entidad con ambos IDs explícitos.
+   Si se quiere endurecer: extraer el id del claim del JWT y long ignorar/validar que
+   coincide con el idUsuario del body (o eliminarlo del body directamente).
+
+2. Sin tests automatizados (unitarios/integración) en ninguno de los 3 microservicios.
+   Se compiló con -DskipTests según lo pedido. Si el profesor pide tests, es un hueco.
+
+3. jwt.secret está en texto plano dentro de config-repo/ms-*.yml (duplicado en los 3
+   archivos porque no se pudo centralizar en application.yml). Aceptable para una
+   evaluación local, no para producción real.
+
+4. No se verificó en runtime (no se levantaron los servicios de verdad todavía) — solo
+   se verificó que compilan y empaquetan sin errores. La verificación end-to-end
+   (Eureka, JWT real, Feign real, circuit breaker real) queda pendiente para mañana.
+
+5. No hay repo git todavía — cero commits. Hay que decidir si se hace un solo commit
+   grande con todo, o se trocea por microservicio/etapa.
+
+
+=====================================================================
+POSIBLES PRÓXIMOS PASOS A DISCUTIR MAÑANA
+=====================================================================
+- Levantar todo y corregir lo que falle en runtime (siempre aparece algo la primera vez:
+  típicamente URLs de datasource, nombres de aplicación no coincidiendo con Eureka, etc.)
+- Decidir si vale la pena agregar tests básicos (al menos uno de integración con
+  @SpringBootTest + Testcontainers o H2, y un test del filtro JWT)
+- git init + commits + subir a GitHub
+- Revisar si el profesor pide algo adicional no cubierto (por ejemplo, paginación,
+  Swagger/OpenAPI, un endpoint de logout/blacklist de tokens, etc.)
+- Decidir qué hacer con la limitación del punto 1 (idUsuario en el body) si importa para
+  la rúbrica de seguridad
