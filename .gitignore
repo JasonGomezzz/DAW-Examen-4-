@@ -5,3 +5,8 @@ target/
 .DS_Store
 *.log
 HELP.md
+
+# Contexto/config de herramientas de IA - no va en la entrega
+.claude/
+CONTEXTO_PROYECTO.txt
+*.session.md
